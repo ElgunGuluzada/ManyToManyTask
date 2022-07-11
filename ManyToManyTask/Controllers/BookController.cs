@@ -36,7 +36,6 @@ namespace ManyToManyTask.Controllers
         }
         public IActionResult Create()
         {
-
             ViewBag.Authors = new SelectList(_context.Authors.ToList(), "Id", "Name");
             ViewBag.Genres = new SelectList(_context.Genres.ToList(), "Id", "Name");
             return View();
@@ -49,7 +48,7 @@ namespace ManyToManyTask.Controllers
             ViewBag.Genres = new SelectList(_context.Genres.ToList(), "Id", "Name");
 
             List<Image> images = new List<Image>();
-
+            if (book.Photos == null) return BadRequest();
             foreach (var item in book.Photos)
             {
                 if (item == null)
@@ -70,13 +69,20 @@ namespace ManyToManyTask.Controllers
                 }
                 Image image = new Image();
                 image.ImageUrl = item.SaveImage(_env, "img");
-                for (int i = 0; i < images.Count; i++)
+              
+                 if(book.Photos.Count==1)
+                 {
+                    image.IsMain = true;
+                 }
+                else
                 {
+                    for (int i = 0; i < images.Count; i++)
+                    {
                         images[0].IsMain = true;
+                    }
                 }
                 images.Add(image);
             }
-
 
             if (!ModelState.IsValid) return View();
 
@@ -130,32 +136,52 @@ namespace ManyToManyTask.Controllers
             .ToList();
             return View(thisBook);
         }
-        public async Task<IActionResult> Delete(Book book)
+        public async Task<IActionResult> Delete(int? id)
         {
-            //if (book.Id == null) return NotFound();
-            Book dbBook = await _context.Books.FindAsync(book.Id);
+            Book dbBook = await _context.Books.FirstOrDefaultAsync(i=>i.Id==id);
             if (dbBook == null) return NotFound();
-            //Image image = _context.Images.FirstOrDefault();
-            //string path = Path.Combine(_env.WebRootPath, "img", image.ImageUrl);
-           //ManyToManyTask.Helpers.Helper.DeleteImage(path);
+            var images = await _context.Images.Where(b => b.BookId == id).ToListAsync();
+            foreach (var image in images)
+            {
+              string path = Path.Combine(_env.WebRootPath, "img", image.ImageUrl);
+              Helpers.Helper.DeleteImage(path);
+            }
             _context.Books.Remove(dbBook);
             _context.SaveChanges();
             return RedirectToAction("index");
         }
+        public IActionResult Update(int? id)
+        {
+            ViewBag.Authors = new SelectList(_context.Authors.ToList(), "Id", "Name");
+            ViewBag.Genres = new SelectList(_context.Genres.ToList(), "Id", "Name");
+            if (id == null) return NotFound();
 
+            Book dbBook = _context.Books.Include(b => b.Images)
+                .Include(a=>a.BookAuthors)
+                .ThenInclude(a=>a.Author)
+                .Include(g=>g.BookGenres)
+                .ThenInclude(a=>a.Genre)
+                .FirstOrDefault(b => b.Id == id);
+
+            if (dbBook == null) return NotFound();
+
+            return View(dbBook);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public IActionResult Update(Book book)
         {
             ViewBag.Authors = new SelectList(_context.Authors.ToList(), "Id", "Name");
             ViewBag.Genres = new SelectList(_context.Genres.ToList(), "Id", "Name");
-            Book dbBook = _context.Books.Find(book.Id);
-            List<Book> books = _context.Books
-           .Include(b => b.Images)
-           .Include(b => b.BookGenres)
-           .ThenInclude(g => g.Genre)
-           .Include(b => b.BookAuthors)
-           .ThenInclude(a => a.Author).ThenInclude(s => s.SocialAccount)
-           .ToList();
-            return View(books);
+
+            Book dbBook = _context.Books.Include(b => b.Images).FirstOrDefault(b => b.Id == book.Id);
+
+            //var img = _context.Images.Where(b=>b.Id==book.Id).FirstOrDefault();
+
+
+
+            return View(dbBook);
         }
     }
 }
